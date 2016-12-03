@@ -78,46 +78,56 @@ static volatile char snd_cnt;
 static void
 isr(void) __interrupt 0
 {
-  if (RBIF)
-  {
-    CREN = (RB5) ? 0 : 1;
-    RBIF = 0;
-    data_cnt = 0;
-  }
   if (RCIF)
   {
     switch (data_cnt)
     {
     case 0:
       left = RCREG >> 3;
+      if (left > 15)
+        left = 15;
       break;
     case 1:
       right = RCREG >> 3;
+      if (right > 15)
+        right = 15;
       CREN = 0;
       break;
     };
     data_cnt++;
   }
+  if (RBIF)
+  {
+    RBIF = 0;
+    data_cnt = 0;
+    CREN = (RB5) ? 0 : 1;
+  }
   if (T0IF)
   {
     char limit;
+
+    if (right < left)
+      limit = right;
+    else
+      limit = left;
+
+    if ((left >= 14) && (right >= 14))
+      snd_cnt = 1;
+
     switch (snd_cnt)
     {
     case 0:
-      TMR2 = 0;
-      TMR2ON = 1;
+      CCP1CON = 0xFF;
       break;
     case 1:
-      TMR2ON = 0;
+      CCP1CON = 0x00;
       break;
     };
-    if (right < left)
-      limit = right & 0x0F;
-    else
-      limit = left & 0x0F;
+
     snd_cnt++;
     if (snd_cnt >= limit)
       snd_cnt = 0;
+
     T0IF = 0;
   }
 }
@@ -156,9 +166,10 @@ main (void)
 
   PR2 = 0x7F;
   CCPR1L = 0x4F;
-  CCP1CON = 0xFF;
+  CCP1CON = 0x00;
   TMR2 = 0;
   T2CKPS1 = 1;
+  TMR2ON = 1;
 
   left = 15;
   right = 15;
@@ -168,8 +179,8 @@ main (void)
 
   while (1)
   {
-    char ll = led_left[left & 0x0F];
-    char lr = led_right[right & 0x0F];
+    char ll = led_left[left];
+    char lr = led_right[right];
     int lm = led_mask[mask_cnt];
 
     PORTC = (PORTC & 0xF0) | ((ll | (char)lm) & 0x0F);
